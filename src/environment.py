@@ -89,13 +89,22 @@ class GraspEnv(object):
         """
         Return state containing arm joint angles/velocities & target position
         """
-        pass
+        return np.array(self.agent.get_joint_positions() + # list, dim=7
+                        self.agent.get_joint_velocities() + # list, dim=7
+                        list(self.target.get_position())) # list, dim=3
+
 
     def _is_holding(self):
         """
         Return the state of holding the target or not, return bool
         """
-        pass
+        # Note that the collision check is not always accurate all the time, 
+        # for continuous collision frames, maybe only the first 4-5 frames of collision can be detected.
+        pad_collide_object = self.gripper_left_pad.check_collision(self.target)
+        if  pad_collide_object and self.proximity_sensor.is_detected(self.target)==True:
+            return True 
+        else:
+            return False
 
     def _move(self, action, bounding_offset = 0.15, step_factor = 0.2, max_iter = 20, max_error = 0.05, rotation_norm = 5.):
         """Move the tip according to the action with the IK for 'end_position' controle mode. IK mode control is archieved through
