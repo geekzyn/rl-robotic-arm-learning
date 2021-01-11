@@ -16,13 +16,74 @@ POS_MIN, POS_MAX = [0.1, -0.3, 1.], [0.45, 0.3, 1.] # valid position range of ta
 class GraspEnv(object):
     """Sawyer robot grasping a cuboid """ 
     def __init__(self, headless, control_mode='joint_velocity'):
-        """[summary]
+        """
+        Initiliaze the environment, setting the public variables, launching and setting up the scene, setting 
+        the porxy variables for the counterparts in the scene
 
         Args:
             headless (bool): if True, no visualization, else with visualization
             control_mode (str, optional): 'end_position' or 'joint_velocity'. Defaults to 'joint_velocity'.
         """
-        pass
+        # set public variables
+        self.headless = headless
+        self.reward_offset = 10.0 # reward value of grasping the object
+        self.reward_range = self.reward_offset # reward range
+        self.penalty_offset = 1. # penalty value for undesired cases
+        self.fall_down_offset = 0.1 # distance for judging the target object fall off the table
+        self.metadata = [] # gym env argument
+        self.control_mode = control_mode
+
+        # launch and setup scene
+        self.pr = PyRep() # call the PyRep
+        if control_mode == 'end_position':
+            # the controle mode with all joints in inverse kinematics mode
+            SCENE_FILE = join(dirname, (abspath(__file__)), './simulations/sawyer_reacher_rl_new_ik.ttt') # scene with joints controlled by IK
+        elif control_mode == 'joint_velocity':
+            SCENE_FILE = join(dirname, (abspath(__file__)), './simulations/sawyer_reacher_rl_new.ttt') # scene with joints controlled by FK
+        self.pr.launch(SCENE_FILE, headless = self.headless) # launch the scene
+        self.pr.start() # start the scene
+
+        # set proxy variables for the counterparts in the scene
+        self.agent = Sawyer() # get robot arm in the scene
+        self.gripper = BaxterGripper # get the gripper in the scene
+        self.gripper_left_pad = Shape('BaxterGripper_leftPad') # name of the left pad of the gripper finger
+        self.proximity_sensor = ProximitySensor('BaxterGripper_attachProxSensor') # name of the proximity sensor
+        self.vision_sensor = VisionSensor('Vision_sensor') # name of the vision sensor
+        self.table = Shape('diningTable') # name of the table in the scene, for checking collision
+
+        # set action and observation space
+        if control_mode == 'end_position':
+            # control the robot arm by the position of its end using IK
+            self.agent.set_control_loop_enabled(True) # if False, IK won't work
+            self.action_space = np.zeros(4) # 3 DOF end position control + 1 DOF rotation of gripper
+        elif control_mode == 'joint_velocity':
+            # control the robot arm by directly setting velocity values on each joint, using FK
+            self.agent.set_control_loop_enabled(False)
+            self.action_space = np.zeros(7) # 7 DOF velocity control, no need for extra control of the end rotation, 7th joint controls it
+        else:
+            raise NotImplementedError
+        self.observation_space = np.zeros(17) # scalar positions and scalar velocities of 7 joints + 3-dimensional position of the target
+        self.agent.set_motor_locked_at_zero_velocity(True) # joints locked in place when velocity is zero
+
+        # set agent tip and target position for IK chain
+        self.target = Shape('target') # get target object
+        self.agent_ee_tip = self.agent.get_tip() # a part of robot as the end of IK chain for controlling
+        self.tip_target = Dummy('Sawyer_target') # the target point of the tip (end of the robot arm) to move towards
+        self.tip_pos = self.agent_ee_tip.get_position() # tip x, y, z position
+
+        # set proper initial robot gesture or tip position
+        if control_mode == 'end_position':
+            initial_pos = [0.3, 0.1, 0.9]
+            self.tip_target.set_position(initial_pos) # set target position
+            # one big step for rotation setting is enough, with reset_dynamics = True, set the rotation instantaneously
+            self.tip_target.set_orientation([0, np.pi, np.pi/2], reset_dynamics=True) # first two dimensions along x, y axis make gripper face downwards
+        elif control_mode == 'joint_velocity':
+            self.initial_joint_positions = [0.0, -1.4, 0.7, 2.5, 3.0, -0.5, 4.1] # a proper initial gesture
+            self.agent.set_joint_positions(self.initial_joint_positions)
+        
+        self.pr.step() # Step the physics simulation
+        self.initial_tip_positions = self.agent_ee_tip.get_position()
+        self.initial_target_positions = self.target.get_position()
 
     def _get_state(self):
         """
