@@ -194,3 +194,21 @@ class GraspEnv(object):
         """
         self.pr.stop()
         self.pr.shutdown()
+
+
+if __name__ == '__main__':
+    # create environment
+    env = GraspEnv(headless=False)
+
+    for episode in range(30):
+        # initialize the env
+        env.reset()
+        for step in range(30):
+            #  7 dim (+ 1 rotation (z-axis) included, last joint)
+            action = np.random.uniform(-2.0, 2.0, 7)
+            # perform action
+            try:
+                env.step(action)
+            except KeyboardInterrupt:
+                print("Shut down!")
+                env.shutdown()
