@@ -32,7 +32,7 @@ class GraspEnv(object):
         self.metadata = [] # gym env argument
 
         # launch and setup scene
-        SCENE_FILE = join(dirname, (abspath(__file__)), './simulations/sawyer_reacher.ttt') # scene with joints controlled by FK
+        SCENE_FILE = join(dirname(abspath(__file__)), '../simulations/sawyer_reacher.ttt') # scene with joints controlled by FK
         self.pr = PyRep() # call the PyRep
         self.pr.launch(SCENE_FILE, headless = self.headless) # launch the scene
         self.pr.start() # start the scene
